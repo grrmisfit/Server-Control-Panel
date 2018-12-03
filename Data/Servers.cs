@@ -10,6 +10,7 @@
         public bool AutoRestart { get; set; }
         public string ServerIp { get; set; }
         public string ServerPort { get; set; }
+        public bool Paused { get; set; }
     }
 
     public class Tab1

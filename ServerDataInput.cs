@@ -3,44 +3,53 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 using System.Windows.Forms;
 using DediServerCron.Data;
 using LiteDB;
 using Microsoft.WindowsAPICodePack.Dialogs;
-using Message = Microsoft.WindowsAPICodePack.Shell.Interop.Message;
+using Timer = System.Timers.Timer;
 
 
 namespace DediServerCron
 {
     public partial class ServerDataInput : UserControl
     {
-        public static string gametype;
+        private static string gametype;
+        private static int testcnt = 1;
         public ServerDataInput()
         {
             InitializeComponent();
+            StartTimer();
         }
+        private static Timer loopingTimer;
 
-        private void ServerDataInput_Load(object sender, EventArgs e)
+
+        internal static Task StartTimer()
         {
-            pictureBox1.ImageLocation = @"icons/Offline.png";
-        }
 
-        private void button2_Click(object sender, EventArgs e)
-        {
-           
-        }
+            loopingTimer = new Timer()
+            {
+                Interval = 5000,
+                AutoReset = true,
+                Enabled = true
+            };
+            loopingTimer.Elapsed += OnTimerTicked;
 
-        private void timer1_Tick(object sender, EventArgs e)
+
+            return Task.CompletedTask;
+        }
+        private static async void OnTimerTicked(object sender, ElapsedEventArgs e)
         {
             string memsize = "GB";
-            var db = new LiteDatabase(@"Data\servers.db");
-            var servers = db.GetCollection<Servers>("servers");
-            var result = servers.FindAll();
+            //var db = new LiteDatabase(@"Data\servers.db");
+            // var servers = db.GetCollection<Servers>("servers");
+            var result = DataStorage.GetDbInfo();//servers.FindAll();
             if (result == null) return;
             foreach (var t in result)
             {
-                var curId = t.Id;
-                var curproc = t.GameType + ".exe";
+                var curCnt = 0;
+                var curproc = t.GameType; //+ ".exe";
                 var confloc = t.ConfigFileLocation;
                 var restart = t.AutoRestart;
                 var batchLoc = t.BatchFileLocation;
@@ -51,9 +60,11 @@ namespace DediServerCron
                 foreach (Process worker in workers)
                 {
                     var thePath = worker.MainModule.FileName;
-                    if (worker.ProcessName == curproc && thePath==t.BatchFileLocation)
+                    string trimedLoc = batchLoc.Replace("startdedicated.bat", "");
+                    string theloc = $"{trimedLoc}{curproc}.exe";
+                    if (worker.ProcessName == curproc && thePath == theloc)
                     {
-                        pictureBox1.ImageLocation = @"icons/online.png";
+
                         PerformanceCounter pc = new PerformanceCounter();
                         pc.CategoryName = "Process";
                         pc.CounterName = "Working Set - Private";
@@ -63,50 +74,164 @@ namespace DediServerCron
                         {
                             memsize = "MB";
                         }
-                        string blah = memconvert + memsize;
-                        label1.Text = blah;
-                        serverFound = true;
-
-                        label6.Text = Utilities.GetServerName(curId,confloc);
+                        string themem = memconvert + memsize;
+                        if (!Globals.SimpleView)
+                        {
+                            pictureBox1.ImageLocation = @"icons/online.png";
+                            serverFound = true;
+                            cpuLabel.Text = Utilities.GetCpuCounter(curproc) + @"%";
+                            memLabel.Text = themem; //Utilities.GetServerName(curId,confloc);
+                        }
+                        else
+                        {
+                            SimpleViewCtrl.OnBox[curCnt].ImageLocation = @"icons/online.png";
+                            serverFound = true;
+                            SimpleViewCtrl.MemLabels[curCnt].Text = themem;
+                            SimpleViewCtrl.CpuLabels[curCnt].Text = Utilities.GetCpuCounter(curproc) + @"%";
+                        }
 
                         break;
                     }
+
+
                 }
 
-                label2.Text = Utilities.GetCpuCounter(curproc).ToString()+ @"%";
+
 
                 if (!serverFound)
                 {
-                    pictureBox1.ImageLocation = @"icons/offline.png";
+                    if (!Globals.SimpleView)
+                    {
+                        pictureBox1.ImageLocation = @"icons/offline.png";
+
+                    }
+                    else
+                    {
+                        SimpleViewCtrl.OnBox[curCnt].ImageLocation = @"icons/offline.png";
+
+                    }
                     if (!restart) continue;
                     Utilities.ExecuteBatch(batchLoc);
                     Task.Delay(5000);
-                    timer1.Enabled = true;
 
                 }
+                curCnt = curCnt + 1;
             }
+
+            await Task.CompletedTask;
+        }
+        private void ServerDataInput_Load(object sender, EventArgs e)
+        {
+            pictureBox1.ImageLocation = @"icons/Offline.png";
         }
 
-        private void button1_MouseHover(object sender, EventArgs e)
-        {
-            ToolTip toolTip1 = new ToolTip();
-            toolTip1.SetToolTip(button1,
-                "Stops the server process, it will be restarted on next check unless auto restart is off");
-        }
+        
 
-        private void timer2_Tick(object sender, EventArgs e)
+        private void timer1_Tick(object sender, EventArgs e)
         {
-            string memsize = " gbs";
-            if (timer1.Enabled) return;
-            var db = new LiteDatabase(@"Data\servers.db");
-            var servers = db.GetCollection<Servers>("servers");
-            var result = servers.FindAll();
+            
+           Application.DoEvents();
+            string memsize = "GB";
+            //var db = new LiteDatabase(@"Data\servers.db");
+           // var servers = db.GetCollection<Servers>("servers");
+            var result = DataStorage.GetDbInfo();//servers.FindAll();
             if (result == null) return;
             foreach (var t in result)
             {
-                var curId = t.Id;
+                var curCnt = 0;
                 var curproc = t.GameType; //+ ".exe";
                 var confloc = t.ConfigFileLocation;
+                var restart = t.AutoRestart;
+                var batchLoc = t.BatchFileLocation;
+
+
+                bool serverFound = false;
+                Process[] workers = Process.GetProcessesByName(curproc); //("7DaysToDieServer.exe");
+                foreach (Process worker in workers)
+                {
+                    var thePath = worker.MainModule.FileName;
+                    string trimedLoc = batchLoc.Replace("startdedicated.bat", "");
+                    string theloc = $"{trimedLoc}{curproc}.exe";
+                    if (worker.ProcessName == curproc && thePath==theloc)
+                    {
+                        
+                        PerformanceCounter pc = new PerformanceCounter();
+                        pc.CategoryName = "Process";
+                        pc.CounterName = "Working Set - Private";
+                        pc.InstanceName = worker.ProcessName;
+                        long memconvert = Convert.ToInt64(pc.NextValue()) / 1000000;
+                        if (memconvert < 1000)
+                        {
+                            memsize = "MB";
+                        }
+                        string themem = memconvert + memsize;
+                        if (!Globals.SimpleView)
+                        {
+                            pictureBox1.ImageLocation = @"icons/online.png";
+                            serverFound = true;
+                            cpuLabel.Text = Utilities.GetCpuCounter(curproc) + @"%";
+                            memLabel.Text = themem; //Utilities.GetServerName(curId,confloc);
+                        }
+                        else
+                        {
+                            SimpleViewCtrl.OnBox[curCnt].ImageLocation = @"icons/online.png";
+                            serverFound = true;
+                            SimpleViewCtrl.MemLabels[curCnt].Text = themem;
+                            SimpleViewCtrl.CpuLabels[curCnt].Text = Utilities.GetCpuCounter(curproc) + @"%";
+                        }
+
+                        break;
+                    }
+
+                    
+                }
+
+                
+
+                if (!serverFound)
+                {
+                    if (!Globals.SimpleView)
+                    {
+                        pictureBox1.ImageLocation = @"icons/offline.png";
+                       
+                    }
+                    else
+                    {
+                        SimpleViewCtrl.OnBox[curCnt].ImageLocation = @"icons/offline.png";
+                        
+                    }
+                    if (!restart) continue;
+                    Utilities.ExecuteBatch(batchLoc);
+                    Task.Delay(5000);
+                    
+                }
+                curCnt = curCnt + 1;
+            }
+
+            testcnt = testcnt + 1;
+        }
+
+        //private void button1_MouseHover(object sender, EventArgs e)
+        //{
+        //    ToolTip toolTip1 = new ToolTip();
+        //    toolTip1.SetToolTip(button1,
+         //       "Stops the server process, it will be restarted on next check unless auto restart is off");
+       // }
+
+        private  void timer2_Tick(object sender, EventArgs e)
+        {
+            
+            string memsize = " gb";
+            if (timer1.Enabled) return;
+           // var db = new LiteDatabase(@"Data\servers.db");
+           // var servers = db.GetCollection<Servers>("servers");
+            var result = DataStorage.GetDbInfo();//servers.FindAll();
+            if (result == null) return;
+            foreach (var t in result)
+            {
+                var curCnt = 0;
+                var curproc = t.GameType; //+ ".exe";
+                //var confloc = t.ConfigFileLocation;
                 var batchLoc = t.BatchFileLocation;
                 
                 bool serverFound = false;
@@ -119,7 +244,7 @@ namespace DediServerCron
                     string theloc = $"{trimedLoc}{curproc}.exe";
                     if (worker.ProcessName == curproc && fullPath == theloc)
                     {
-                        pictureBox1.ImageLocation = @"icons/online.png";
+                        
                         PerformanceCounter pc = new PerformanceCounter();
                         pc.CategoryName = "Process";
                         pc.CounterName = "Working Set - Private";
@@ -127,37 +252,49 @@ namespace DediServerCron
                         long memconvert = Convert.ToInt64(pc.NextValue()) / 1000000;
                         if (memconvert < 1000)
                         {
-                            memsize = " mbs";
+                            memsize = " mb";
                         }
-                        string blah = memconvert + memsize;
-                        label6.Text = blah;
-                        serverFound = true;
-                        var curCpu = Utilities.GetCpuCounter(curproc);
-                        label1.Text = curCpu  + @"%";
+                        string themem = memconvert + memsize;
+                        if (!Globals.SimpleView)
+                        {
+                            pictureBox1.ImageLocation = @"icons/online.png";
+                            
+                            cpuLabel.Text = Utilities.GetCpuCounter(curproc) + @"%";
+                            memLabel.Text = themem;
+                        }
+                        else
+                        {
+                            SimpleViewCtrl.OnBox[curCnt].ImageLocation = @"icons/online.png";
+                            
+                            SimpleViewCtrl.MemLabels[curCnt].Text = themem;
+                            SimpleViewCtrl.CpuLabels[curCnt].Text = Utilities.GetCpuCounter(curproc) + @"%";
+                        }
                         
+                        serverFound = true;
                         break;
                     }
                 }
 
-                label2.Text = Utilities.GetCpuCounter(curproc).ToString();
+                
 
-                if (!serverFound)
+                if (!serverFound && !Globals.SimpleView)
                 {
                     pictureBox1.ImageLocation = @"icons/offline.png";
                     label7.Text = @"Server Offline";
-                    label6.Text = "";
+                    memLabel.Text = "";
                     button2.Enabled = true;
                 }
             }
+            
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            var db = new LiteDatabase(@"Data\servers.db");
-            var theserver = db.GetCollection<Servers>("servers");
+            //var db = new LiteDatabase(@"Data\servers.db");
+           // var theserver = db.GetCollection<Servers>("servers");
             var form = new Form1();
             var curtab = form.tabControl1.SelectedTab.TabIndex +1;
-            var results = theserver.FindById(curtab);
+            var results = DataStorage.GetDbInfobyId(curtab); //theserver.FindById(curtab);
 
             if (results == null)
             {
@@ -175,16 +312,16 @@ namespace DediServerCron
 
                 string fullPath = server.MainModule.FileName;
                 string trimedLoc = batchLoc.Replace("startdedicated.bat", "");
-                //if (server.ProcessName == curproc && fullPath == $"{trimedLoc}{curproc}.exe")
-
-                    if (server.ProcessName == curproc && fullPath == $"{trimedLoc}{curproc}.exe")
+                
+                if (server.ProcessName == curproc && fullPath == $"{trimedLoc}{curproc}.exe")
 
                 {
                     server.Kill();
                     server.WaitForExit();
                     server.Dispose();
                     label1.Text = "";
-                    label2.Text = "";
+                    cpuLabel.Text = "";
+                    break;
                 }
             }
         }
@@ -390,7 +527,7 @@ namespace DediServerCron
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            var game = results.GameType;
+            
             var curproc = results.GameType;
             var batchLoc = results.BatchFileLocation;
             Process[] servers = Process.GetProcessesByName(curproc); //("7DaysToDieServer.exe");
@@ -414,12 +551,61 @@ namespace DediServerCron
             }
             Utilities.ExecuteBatch(batchLoc);
             Thread.Sleep(5000);
-            timer1.Enabled = true;
+            if (results.Paused)
+            {
+                var update = new Servers
+                {
+                    Paused = false
+                };
+                theserver.Update(update);
+            }
+            
+            button2.Enabled = false;
+
         }
 
         private void button4_Click(object sender, EventArgs e)
         {
+            var form = new Form1();
+            var curtab = form.tabControl1.SelectedTab.TabIndex + 1;
+            var results = DataStorage.GetDbInfobyId(curtab); //theserver.FindById(curtab);
 
+            if (results == null)
+            {
+                MessageBox.Show(@"No server is set to this tab, check settings and try again.", @"Error!",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var curproc = results.GameType;
+            var batchLoc = results.BatchFileLocation;
+            Process[] servers = Process.GetProcessesByName(curproc); //("7DaysToDieServer.exe");
+            foreach (var server in servers)
+            {
+
+
+                string fullPath = server.MainModule.FileName;
+                string trimedLoc = batchLoc.Replace("startdedicated.bat", "");
+
+                if (server.ProcessName == curproc && fullPath == $"{trimedLoc}{curproc}.exe")
+
+                {
+                    server.Kill();
+                    server.WaitForExit();
+                    server.Dispose();
+                    label1.Text = "";
+                    cpuLabel.Text = "";
+                    var servUpdate = DataStorage.GetDb();
+                    var update = new Servers
+                    {
+                        Paused = true
+                    };
+                    servUpdate.Update(update);
+
+                    results.Paused = true;
+                    break;
+                }
+            }
         }
 
         private void button9_Click(object sender, EventArgs e)

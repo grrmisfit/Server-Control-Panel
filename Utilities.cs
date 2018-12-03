@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Xml;
+using DediServerCron.Data;
+using LiteDB;
 
 namespace DediServerCron
 {
@@ -95,15 +98,15 @@ namespace DediServerCron
         {
             try
             {
-                PerformanceCounter total_cpu = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+                PerformanceCounter totalCpu = new PerformanceCounter("Processor", "% Processor Time", "_Total");
 
-                PerformanceCounter process_cpu = new PerformanceCounter("Process", "% Processor Time", appName);
-                var process_cpu_usage = (total_cpu.NextValue() / 100) * process_cpu.NextValue();
-                //var processUsage = process_cpu_usagenextValue() / Environment.ProcessorCount;
+                PerformanceCounter processCpu = new PerformanceCounter("Process", "% Processor Time", appName);
+                var process_cpu_usage = (totalCpu.NextValue() / 100) * processCpu.NextValue();
+                //var processUsage = process_cpu_usage.nextValue() / Environment.ProcessorCount;
 
-                float t = total_cpu.NextValue();
+                float t = totalCpu.NextValue();
                 Thread.Sleep(1000);
-                var p = process_cpu.NextValue() / Environment.ProcessorCount;
+                var p = processCpu.NextValue() / Environment.ProcessorCount;
                 Decimal theVal = Convert.ToDecimal(p);
                 return Math.Round(theVal, 2);
             }
@@ -113,13 +116,9 @@ namespace DediServerCron
                 return "error";
             }
            
-           
-
-
-
         }
 
-
+        
     }
 }
 

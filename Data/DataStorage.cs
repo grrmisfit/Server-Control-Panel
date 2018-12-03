@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 using LiteDB;
 
 namespace DediServerCron.Data
@@ -51,6 +52,44 @@ namespace DediServerCron.Data
                 BatchFileLocation = "test"
             };
             servers.Insert(newServer);
+        }
+        public static IEnumerable<Servers> GetDbInfo()
+        {
+            using (var db = new LiteDatabase(@"Data\servers.db"))
+            {
+
+                var servers = db.GetCollection<Servers>("servers");
+
+                var result = servers.FindAll();
+                
+                return result;
+            }
+        }
+
+        public static Servers GetDbInfobyId(int id)
+        {
+            using (var db = new LiteDatabase(@"Data\servers.db"))
+            {
+
+                var servers = db.GetCollection<Servers>("servers");
+
+                var result = servers.FindById(id);
+
+                return result;
+            }
+        }
+
+        public static LiteCollection<Servers> GetDb()
+        {
+            using (var db = new LiteDatabase(@"Data\servers.db"))
+            {
+
+                var servers = db.GetCollection<Servers>("servers");
+
+                
+
+                return servers;
+            }
         }
     }
 }
